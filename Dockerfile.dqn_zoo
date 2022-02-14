@@ -1,0 +1,89 @@
+ARG BASE_IMAGE=nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
+
+FROM $BASE_IMAGE
+
+# cleanup script for use after apt-get
+RUN echo '#! /bin/sh\n\
+env DEBIAN_FRONTEND=noninteractive apt-get autoremove -y\n\
+apt-get clean\n\
+find /var/lib/apt/lists -type f -delete\n\
+find /var/cache -type f -delete\n\
+find /var/log -type f -delete\n\
+rm -rf /var/lib/apt/lists/*\n\
+exit 0\n\
+' > /cleanup && chmod +x /cleanup
+
+# Avoid warnings by switching to noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
+
+
+## dqn_zoo
+RUN apt-get update --fix-missing
+
+COPY docs/system.sh system.sh
+RUN bash system.sh
+
+# Install Python 3, pip, setuptools.
+RUN apt-get install -y python3=3.6.7-1~18.04 python3-pip python3-setuptools
+RUN pip3 install --upgrade pip==20.1.1 setuptools==47.3.1
+
+# Install dependencies for snappy.
+RUN apt-get install -y libsnappy-dev=1.1.7-1
+
+# env check this: https://github.com/tianon/docker-brew-debian/issues/45#issuecomment-325235517
+RUN \
+  apt-get install -y locales git&&\
+  export LANG=en_US.UTF-8 && \
+  export LC_ALL=$LANG && \
+  locale-gen --purge $LANG
+
+
+# Replace 1000 with your user/group id 
+# check with `id username`
+ENV USERNAME=qzhang419
+ENV UID=1056110
+ENV GID=2626
+# security
+RUN useradd -m $USERNAME && \
+    echo "$USERNAME:$USERNAME" | chpasswd && \
+    usermod --shell /bin/zsh $USERNAME && \
+    usermod -aG sudo $USERNAME && \
+    echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >>/etc/sudoers.d/$USERNAME && \
+    chmod 0440 /etc/sudoers.d/$USERNAME && \
+    usermod --uid $UID $USERNAME && \
+    groupmod --gid $GID $USERNAME
+
+RUN ssh-keygen -A
+
+
+# sshd
+RUN ( \
+    echo 'LogLevel DEBUG2'; \
+    echo 'PermitRootLogin yes'; \
+    echo 'PasswordAuthentication yes'; \
+    echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
+  ) > /etc/ssh/sshd_config_docker \
+  && mkdir /run/sshd
+
+USER $USERNAME
+
+# clean apt
+RUN sudo /cleanup
+WORKDIR /home/$USERNAME
+
+# Copy requirements file specifying pinned dependencies.
+COPY ./docker_requirements.txt /home/$USERNAME/
+RUN sudo chown -R qzhang419 /home/$USERNAME/docker_requirements.txt
+# Install Python dependencies.
+RUN pip3 install -r docker_requirements.txt
+
+# List Python dependencies.
+RUN pip3 freeze
+
+COPY docs/dot.sh /home/$USERNAME/
+RUN sudo chown -R qzhang419 /home/$USERNAME/dot.sh
+# setup dotfile only pull no push
+RUN zsh $HOME/dot.sh
+
+RUN sudo /cleanup
+ENTRYPOINT ["tail", "-f", "/dev/null"]
