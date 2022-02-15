@@ -65,7 +65,7 @@ flags.DEFINE_string('name', 'deleteme', '')
 
 def main(argv):
   # start wandb
-  proj_name = f"priority_{FLAGS.name}"
+  proj_name = f"exp_{FLAGS.name}"
   Wandb.launch(FLAGS, FLAGS.wandb, proj_name)
       
   """Trains Prioritized DQN agent on Atari."""
