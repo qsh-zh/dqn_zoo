@@ -43,6 +43,7 @@ from dqn_zoo import parts
 from dqn_zoo import processors
 from dqn_zoo import replay as replay_lib
 from dqn_zoo.dqn import agent
+from dqn_zoo.jam_wandb import Wandb
 
 # Relevant flag values are expressed in terms of environment frames.
 FLAGS = flags.FLAGS
@@ -71,10 +72,20 @@ flags.DEFINE_integer('num_iterations', 200, '')
 flags.DEFINE_integer('num_train_frames', int(1e6), '')  # Per iteration.
 flags.DEFINE_integer('num_eval_frames', int(5e5), '')  # Per iteration.
 flags.DEFINE_integer('learn_period', 16, '')
-flags.DEFINE_string('results_csv_path', '/tmp/results.csv', '')
+flags.DEFINE_string('results_csv_path', '', '')
+
+# new
+flags.DEFINE_bool('wandb', False, '')
+flags.DEFINE_integer('save_freq', 1, '')
+flags.DEFINE_integer('eval_freq', 1, '')
+flags.DEFINE_string('name', 'deleteme', '')
+
 
 
 def main(argv):
+  proj_name = f"priority_{FLAGS.name}"
+  Wandb.launch(FLAGS, FLAGS.wandb, proj_name)
+
   """Trains DQN agent on Atari."""
   del argv
   logging.info('DQN on Atari on %s.', jax.lib.xla_bridge.get_backend().platform)
@@ -216,12 +227,13 @@ def main(argv):
     train_trackers = parts.make_default_trackers(train_agent)
     train_stats = parts.generate_statistics(train_trackers, train_seq_truncated)
 
-    logging.info('Evaluation iteration %d.', state.iteration)
-    eval_agent.network_params = train_agent.online_params
-    eval_seq = parts.run_loop(eval_agent, env, FLAGS.max_frames_per_episode)
-    eval_seq_truncated = itertools.islice(eval_seq, FLAGS.num_eval_frames)
-    eval_trackers = parts.make_default_trackers(eval_agent)
-    eval_stats = parts.generate_statistics(eval_trackers, eval_seq_truncated)
+    if state.iteration % FLAGS.eval_freq == 0:
+        logging.info('Evaluation iteration %d.', state.iteration)
+        eval_agent.network_params = train_agent.online_params
+        eval_seq = parts.run_loop(eval_agent, env, FLAGS.max_frames_per_episode)
+        eval_seq_truncated = itertools.islice(eval_seq, FLAGS.num_eval_frames)
+        eval_trackers = parts.make_default_trackers(eval_agent)
+        eval_stats = parts.generate_statistics(eval_trackers, eval_seq_truncated)
 
     # Logging and checkpointing.
     human_normalized_score = atari_data.get_human_normalized_score(
@@ -245,10 +257,16 @@ def main(argv):
     log_output_str = ', '.join(('%s: ' + f) % (n, v) for n, v, f in log_output)
     logging.info(log_output_str)
     writer.write(collections.OrderedDict((n, v) for n, v, _ in log_output))
+    
+    log_info = {item[0]: item[1] for item in log_output}
+    Wandb.log(log_info)
+
     state.iteration += 1
-    checkpoint.save()
+    if state.iteration % FLAGS.save_freq == 0:
+        checkpoint.save()
 
   writer.close()
+  checkpoint.save()
 
 
 if __name__ == '__main__':
