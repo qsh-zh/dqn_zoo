@@ -516,6 +516,95 @@ class PrioritizedTransitionReplay(Generic[ReplayStructure]):
     self._storage = state['storage']
     self._distribution.set_state(state['distribution'])
 
+class ExpTransitionReplay(Generic[ReplayStructure]):
+    def __init__(
+        self,
+        capacity: int,
+        structure: ReplayStructure,
+        temperature_fn: Callable[[int], float],
+        uniform_sample_probability: float,
+        normalize_weights: bool,
+        random_state: np.random.RandomState,
+        encoder: Optional[Callable[[ReplayStructure], Any]] = None,
+        decoder: Optional[Callable[[Any], ReplayStructure]] = None,
+    ):
+        self._capacity = capacity
+        self._structure = structure
+        self._random_state = random_state
+        self._encoder = encoder or (lambda s: s)
+        self._decoder = decoder or (lambda s: s)
+        self._temperature_fn = temperature_fn
+        self._uniform_sample_probability = uniform_sample_probability
+        self._normalize_weights = normalize_weights
+        self._storage = [None] * capacity
+        # default neg inf td error, never get sampled
+        self._td_error = np.array([-np.inf]*capacity)
+        self._t = 0
+    
+    def add(self, item: ReplayStructure, priority: float) -> None:
+        index = self._t % self._capacity
+        self._storage[index] = item
+        self._storage[index] = priority
+        self._t += 1
+
+    def get(self, indices: Sequence[int]) -> List[ReplayStructure]:
+        """Retrieves transitions by indices."""
+        return [self._decoder(self._storage[i]) for i in indices]
+
+    def sample(
+        self,
+        size: int,
+    ) -> Tuple[ReplayStructure, np.ndarray, np.ndarray]:
+        # TODO: occationally get random sample
+        # TODO: do we really need it?
+        uniformal_indices = self._random_state.randnint(self.size, size=size)
+
+        log_p = self._td_error / self.temperature
+        un_p = self.exp(log_p - log_p.max())
+        p = un_p / p.sum()
+        # TODO: should exist more efficient approach
+        samples = self._random_state.multinomial(size, p)
+        i = np.nonzero(samples)
+        exp_indices = np.repeat(i, samples[i])
+
+        indices = np.where(
+            self._random_state.uniform(size=size) < self._uniform_sample_probability,
+            uniformal_indices,
+            exp_indices
+        )
+
+        samples = self.get(indices)
+        transposed = zip(*samples)
+        stacked = [np.stack(xs, axis=0) for xs in transposed]
+        return type(self._structure)(*stacked), indices, np.ones(size)
+
+    def update_priorities(self, indices: Sequence[int], priorities: Sequence[float]) -> None:
+        priorities = np.asarray(priorities)
+        self._td_error[indices] = priorities
+
+    @property
+    def size(self) -> int:
+        """Number of elements currently contained in replay."""
+        return min(self._t, self._capacity)
+
+
+    def get_state(self) -> Mapping[Text, Any]:
+        """Retrieves replay state as a dictionary (e.g. for serialization)."""
+        return {
+            't': self._t,
+            'storage': self._storage,
+            'td_error': self._td_error,
+        }
+
+    def set_state(self, state: Mapping[Text, Any]) -> None:
+        """Sets replay state from a (potentially de-serialized) dictionary."""
+        self._t = state['t']
+        self._storage = state['storage']
+        self._td_error = state['td_error']
+
+    @property
+    def temperature(self):
+        return self._temperature_fn(self._t)
 
 class TransitionAccumulator:
   """Accumulates timesteps to form transitions."""
