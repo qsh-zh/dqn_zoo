@@ -54,7 +54,7 @@ flags.DEFINE_integer('num_eval_frames', int(5e5), '')  # Per iteration.
 flags.DEFINE_integer('learn_period', 16, '')
 flags.DEFINE_string('results_csv_path', '', '')
 
-flags.DEFINE_float('temp_begin_value', 100, '')
+flags.DEFINE_float('temp_begin_value', 20, '')
 flags.DEFINE_float('temp_end_value', 1., '')
 flags.DEFINE_float('uniform_sample_probability', 1e-3, '')
 flags.DEFINE_bool('normalize_weights', True, '')

@@ -543,8 +543,8 @@ class ExpTransitionReplay(Generic[ReplayStructure]):
     
     def add(self, item: ReplayStructure, priority: float) -> None:
         index = self._t % self._capacity
-        self._storage[index] = item
-        self._storage[index] = priority
+        self._storage[index] = self._encoder(item)
+        self._td_error[index] = priority
         self._t += 1
 
     def get(self, indices: Sequence[int]) -> List[ReplayStructure]:
@@ -560,8 +560,8 @@ class ExpTransitionReplay(Generic[ReplayStructure]):
         uniformal_indices = self._random_state.randint(self.size, size=size)
 
         log_p = self._td_error / self.temperature
-        un_p = self.exp(log_p - log_p.max())
-        p = un_p / p.sum()
+        un_p = np.exp(log_p - log_p.max())
+        p = un_p / un_p.sum()
         # TODO: should exist more efficient approach
         samples = self._random_state.multinomial(size, p)
         i = np.nonzero(samples)
