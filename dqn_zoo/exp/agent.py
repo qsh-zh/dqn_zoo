@@ -213,9 +213,9 @@ class ExpDqn(parts.Agent):
     return self._exploration_epsilon(self._frame_t)
 
   @property
-  def importance_sampling_exponent(self) -> float:
+  def temperature(self) -> float:
     """Returns current importance sampling exponent of prioritized replay."""
-    return self._replay.importance_sampling_exponent
+    return self._replay.temperature
 
   @property
   def max_seen_priority(self) -> float:
