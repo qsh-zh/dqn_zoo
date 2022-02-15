@@ -557,7 +557,7 @@ class ExpTransitionReplay(Generic[ReplayStructure]):
     ) -> Tuple[ReplayStructure, np.ndarray, np.ndarray]:
         # TODO: occationally get random sample
         # TODO: do we really need it?
-        uniformal_indices = self._random_state.randnint(self.size, size=size)
+        uniformal_indices = self._random_state.randint(self.size, size=size)
 
         log_p = self._td_error / self.temperature
         un_p = self.exp(log_p - log_p.max())
