@@ -587,6 +587,9 @@ class ExpTransitionReplay(Generic[ReplayStructure]):
         """Number of elements currently contained in replay."""
         return min(self._t, self._capacity)
 
+    @property
+    def capacity(self) ->int:
+        return self._capacity
 
     def get_state(self) -> Mapping[Text, Any]:
         """Retrieves replay state as a dictionary (e.g. for serialization)."""
